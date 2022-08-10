@@ -208,7 +208,7 @@ bool initialConfig = false;
 
 // Use false to disable NTP config. Advisable when using Cellphone, Tablet to access Config Portal.
 // See Issue 23: On Android phone ConfigPortal is unresponsive (https://github.com/khoih-prog/ESP_WiFiManager/issues/23)
-#define USE_ESP_WIFIMANAGER_NTP true
+#define USE_ESP_WIFIMANAGER_NTP false
 
 // Just use enough to save memory. On ESP8266, can cause blank ConfigPortal screen
 // if using too much memory
@@ -695,6 +695,7 @@ void recvMsg(uint8_t *data, size_t len)
 
 int PIN_LEVEL_REF = 15;
 int PIN_RELAY_SHOWER = 4;
+int status_shower = 0;
 
 // int cx1_status = B00000000; //Star with 0  14 = 0000 1111
 // int cx1_pins[] = {9, 10, 11};
@@ -721,7 +722,7 @@ int INTERVAL_READ_PINS = 3000;
 
 void relayShower(bool activate)
 {
-  digitalWrite(PIN_RELAY_SHOWER, activate ? HIGH : LOW);
+  digitalWrite(PIN_RELAY_SHOWER, activate ? LOW : HIGH);
 }
 
 void setupPins(int arr_pins[])
@@ -851,12 +852,12 @@ String levelToJson(int arr_pins[])
 void setupEndpoint(AsyncWebServer *server)
 {
 
-  // server->on("/cx1", HTTP_GET, [](AsyncWebServerRequest *request)
-  //   {
-  //     String message = levelToJson(cx1_pins);
-  //     WebSerial.println(message);
-  //     request->send_P(200, F("application/json"), message.c_str()); 
-  //   });
+  server->on("/cx1", HTTP_GET, [](AsyncWebServerRequest *request)
+    {
+      String message = levelToJson(cx1_pins);
+      WebSerial.println(message);
+      request->send_P(200, F("application/json"), message.c_str()); 
+    });
 
   server->on("/shower", HTTP_GET, [](AsyncWebServerRequest *request)
     {
@@ -866,16 +867,14 @@ void setupEndpoint(AsyncWebServer *server)
       if(request->hasParam("p")){
         AsyncWebParameter* p = request->getParam("p");
         if (p->value().compareTo("1") == 0){ //its equal
-          digitalWrite(PIN_RELAY_SHOWER,HIGH);
+          status_shower = 1;
         }else{
-          digitalWrite(PIN_RELAY_SHOWER,LOW);
+          status_shower = 0;
         }
         // delay(20);
 
         doc["status"] = true;
-        doc["relay_shower"] = String(digitalRead(PIN_RELAY_SHOWER));
-
-        events.send(doc["relay_shower"],"shower_status",millis());
+        doc["relay_shower"] = String(status_shower);
       }
 
       String message = "";
@@ -1371,7 +1370,12 @@ void loop()
     String message = levelToJson(cx1_pins);
     // Send Events to the Web Server with the Sensor Readings
     events.send("ping", NULL, millis());
-    events.send(message.c_str(), "pressure", millis());
+    events.send(message.c_str(), "shower_box", millis());
+
+    relayShower(status_shower==1);
+        // doc["relay_shower"] = String(digitalRead(PIN_RELAY_SHOWER));
+
+    events.send(String(status_shower).c_str(),"shower_status",millis());
 
     lastTime = millis();
   }

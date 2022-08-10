@@ -4,7 +4,7 @@
 <head>
   <title>Casa Kombi Amora</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:,">
+  <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
   <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 
@@ -81,7 +81,7 @@
 </body>
 <script>
 
-  const shower_status = "0";
+  let shower_status = "0";
   const btn_shower = document.querySelector("#btn_shower");
 
   function clickShower() {
@@ -89,13 +89,21 @@
     btn_shower.textContent = "Carregando...";
     btn_shower.ariaDisabled = true;
     if (shower_status){
-      let send_status = shower_status === "0" ? "1" : "0";
-      
-      btn_shower.textContent = "Enviando...";
+      let send_status = shower_status == "0" ? "1" : "0";
+      console.log('send_status',send_status);
+      setTextShowerButton("Enviando...",false);
       fetch(`/shower?p=${send_status}`).then(res=>res.json()).then(json=>{
-        let text = send_status == "1" ? "Desligar": "Ligar";
-        btn_shower.textContent = text;
+        // let text = send_status == "1" ? "Desligar": "Ligar";
+        // btn_shower.textContent = text;
       }).finally(()=> btn_shower.ariaDisabled = false);
+    }
+  }
+  function setStateShowerButton(toPowerOn=true) {
+    setTextShowerButton(toPowerOn?"Ligar":"Desligar",false);
+    if (toPowerOn){
+      btn_shower.classList.remove("button2");
+    }else{
+      btn_shower.classList.add("button2");
     }
   }
 
@@ -109,19 +117,9 @@
 
   function updateShowerButton(new_status) {
     console.log('updateShowerButton new_status',new_status);
-    setTextShowerButton("Carregando...",true);
-    if (shower_status){
-      let send_status = shower_status === "0" ? "1" : "0";
-      
-      setTextShowerButton("Enviando...",true);
-
-      fetch(`/shower?p=${send_status}`).then(res=>res.json()).then(json=>{
-        let text = send_status == "1" ? "Desligar": "Ligar";
-        setTextShowerButton(text,false);
-      }).finally(()=> {
-        btn_shower.ariaDisabled = false
-      });
-    }
+    shower_status = new_status;
+    setTextShowerButton(new_status==1?"Desligar":"Ligar",false);
+    setStateShowerButton(new_status==1?false:true);
   }
 
   function updateLevels(arrStatus) {
@@ -149,7 +147,7 @@
       }
     }, false);
 
-    source.addEventListener('pressure', function (e) {
+    source.addEventListener('shower_box', function (e) {
       console.log("json string", e.data);
       const obj = JSON.parse(e.data);
       updateLevels(obj["cx1"]);
@@ -157,50 +155,13 @@
 
     source.addEventListener('shower_status', function (e) {
       console.log("json string", e.data);
-      updateShowerButton(e.data);_
+      updateShowerButton(e.data);
     }, false);
 
     source.addEventListener('time', function (e) {
       console.log("date time: ", e.data);
     }, false);
   }
-
-
-  // setInterval(function () {
-  //   fetch("/cx1")
-  //     .then(function (response) {
-  //       return response.json();
-  //     })
-  //     .then(function (jsonResponse) {
-        
-  //       const arrStatus = jsonResponse["cx1"];
-  //       console.log("arrStatus", arrStatus);
-  //       updateLevels(arrStatus);
-
-  //     }).catch(console.err);
-  // }, 3000);
-
-  // setInterval(function ( ) {
-  //   var xhttp = new XMLHttpRequest();
-  //   xhttp.onreadystatechange = function() {
-  //     if (this.readyState == 4 && this.status == 200) {
-  //       document.getElementById("humidity").innerHTML = this.responseText;
-  //     }
-  //   };
-  //   xhttp.open("GET", "/humidity", true);
-  //   xhttp.send();
-  // }, 10000 ) ;
-
-  // setInterval(function ( ) {
-  //   var xhttp = new XMLHttpRequest();
-  //   xhttp.onreadystatechange = function() {
-  //     if (this.readyState == 4 && this.status == 200) {
-  //       document.getElementById("pressure").innerHTML = this.responseText;
-  //     }
-  //   };
-  //   xhttp.open("GET", "/pressure", true);
-  //   xhttp.send();
-  // }, 10000 ) ;
 </script>
 
 </html>
