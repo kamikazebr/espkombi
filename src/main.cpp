@@ -1,35 +1,3 @@
-/****************************************************************************************************************************
-  Async_ESP32_FSWebServer_DRD - Example WebServer with SPIFFS backend for ESP32
-  For ESP32 boards
-
-  ESPAsync_WiFiManager is a library for the ESP8266/Arduino platform, using (ESP)AsyncWebServer to enable easy
-  configuration and reconfiguration of WiFi credentials using a Captive Portal.
-
-  Modified from
-  1. Tzapu               (https://github.com/tzapu/WiFiManager)
-  2. Ken Taylor          (https://github.com/kentaylor)
-  3. Alan Steremberg     (https://github.com/alanswx/ESPAsyncWiFiManager)
-  4. Khoi Hoang          (https://github.com/khoih-prog/ESP_WiFiManager)
-
-  Built by Khoi Hoang https://github.com/khoih-prog/ESPAsync_WiFiManager
-  Licensed under MIT license
- *****************************************************************************************************************************/
-/*****************************************************************************************************************************
-   Compare this efficient Async_ESP32_FSWebServer_DRD example with the so complicated twin ESP32_FSWebServer
-   in (https://github.com/khoih-prog/ESP_WiFiManager) to appreciate the powerful AsynWebServer.
-
-   How To Upload Files:
-   1) Go to http://async-esp32fs.local/edit, then "Choose file" -> "Upload"
-   2) or Upload the contents of the data folder with MkSPIFFS Tool ("ESP8266 Sketch Data Upload" in Tools menu in Arduino IDE)
-   3) or you can upload the contents of a folder if you CD in that folder and run the following command:
-      for file in `\ls -A1`; do curl -F "file=@$PWD/$file" esp8266fs.local/edit; done
-
-   How To Use:
-   1) access the sample web page at http://async-esp32fs.local
-   2) edit the page by going to http://async-esp32fs.local/edit
-   3. Use configurable user/password to login. Default is admin/admin
-*****************************************************************************************************************************/
-
 #if (!defined(ESP32))
 #error This code is intended to run only on the ESP32 platform! Please check your Tools->Board setting.
 #endif
@@ -131,26 +99,19 @@ FS *filesystem = &FFat;
 #define ESP_DRD_USE_EEPROM true
 #endif
 
-#define DOUBLERESETDETECTOR_DEBUG true // false
-
-#include <ESP_DoubleResetDetector.h> //https://github.com/khoih-prog/ESP_DoubleResetDetector
-
-// Number of seconds after reset during which a
-// subseqent reset will be considered a double reset.
-#define DRD_TIMEOUT 3
-
-// RTC Memory Address for the DoubleResetDetector to use
-#define DRD_ADDRESS 0
+#define DEBUG true
 
 #pragma region WifiConfig
 // DoubleResetDetector drd(DRD_TIMEOUT, DRD_ADDRESS);
-DoubleResetDetector *drd = NULL;
+// DoubleResetDetector *drd = NULL;
 //////
 
 // SSID and PW for Config Portal
 String ssid = "ESP_" + String((uint32_t)ESP.getEfuseMac(), HEX);
-String password;
 
+const bool IS_TEST = ssid.compareTo("ESP_cfa3c9c8") == 0 ? true : false; // ESP_cfa3c9c8
+
+String password;
 // SSID and PW for your Router
 String Router_SSID;
 String Router_Pass;
@@ -208,7 +169,7 @@ bool initialConfig = false;
 
 // Use false to disable NTP config. Advisable when using Cellphone, Tablet to access Config Portal.
 // See Issue 23: On Android phone ConfigPortal is unresponsive (https://github.com/khoih-prog/ESP_WiFiManager/issues/23)
-#define USE_ESP_WIFIMANAGER_NTP false
+#define USE_ESP_WIFIMANAGER_NTP true
 
 // Just use enough to save memory. On ESP8266, can cause blank ConfigPortal screen
 // if using too much memory
@@ -290,7 +251,8 @@ IPAddress APStaticSN = IPAddress(255, 255, 255, 0);
 // Redundant, for v1.10.0 only
 //#include <ESPAsync_WiFiManager-Impl.h>          //https://github.com/khoih-prog/ESPAsync_WiFiManager
 
-const String host = "kombi";
+const String host = IS_TEST ? "kombi2" : "kombi";
+// const String host = "kombi";
 
 #define HTTP_PORT 80
 
@@ -372,6 +334,25 @@ void configWiFi(WiFi_STA_IPConfig in_WM_STA_IPconfig)
 
 ///////////////////////////////////////////
 
+#pragma region WebSerial
+
+#include <WebSerial.h>
+
+/* Message callback of WebSerial */
+void recvMsg(uint8_t *data, size_t len)
+{
+  WebSerial.println("Received Data...");
+  String d = "";
+  for (int i = 0; i < len; i++)
+  {
+    d += char(data[i]);
+  }
+  WebSerial.println(d);
+}
+#pragma endregion
+
+///////////////////////////////////////////
+
 uint8_t connectMultiWiFi()
 {
 #if ESP32
@@ -448,7 +429,7 @@ uint8_t connectMultiWiFi()
     LOGERROR(F("WiFi not connected"));
 
     // To avoid unnecessary DRD
-    drd->loop();
+    // drd->loop();
 
     ESP.restart();
   }
@@ -509,7 +490,8 @@ void printLocalTime()
     Serial.print("Local Date/Time: ");
     const char *timeString = asctime(&timeinfo);
     Serial.print(timeString);
-    events.send(timeString,"time",millis());
+    WebSerial.println(timeString);
+    events.send(timeString, "time", millis());
   }
 #endif
 }
@@ -674,28 +656,12 @@ void saveConfigData()
 
 #pragma endregion
 
-#pragma region WebSerial
-
-#include <WebSerial.h>
-
-/* Message callback of WebSerial */
-void recvMsg(uint8_t *data, size_t len)
-{
-  WebSerial.println("Received Data...");
-  String d = "";
-  for (int i = 0; i < len; i++)
-  {
-    d += char(data[i]);
-  }
-  WebSerial.println(d);
-}
-#pragma endregion
-
 #pragma region SetupSensors
 
 int PIN_LEVEL_REF = 15;
 int PIN_RELAY_SHOWER = 4;
 int status_shower = 0;
+int old_status_shower = 0;
 
 // int cx1_status = B00000000; //Star with 0  14 = 0000 1111
 // int cx1_pins[] = {9, 10, 11};
@@ -704,7 +670,6 @@ int cx1_pins[] = {13, 12, 14, 27};
 const int NUM_PINS = sizeof(cx1_pins) / sizeof(cx1_pins[0]);
 
 const unsigned long SPEED_SERIAL = 115200;
-unsigned long lastTime = millis();
 int INTERVAL_READ_PINS = 3000;
 
 // void setGND(int pinOut, bool isGND)
@@ -804,16 +769,6 @@ int readLevelsPins(int arr_pins[])
 }
 #pragma endregion
 
-// #pragma region ESPUI
-// #include <ESPUI.h>
-// void setupESPUI(AsyncServer *server){
-//   ESPUI.prepareFileSystem();
-
-//   ESPUI.begin("Casa Kombi Amora");
-// }
-
-// #pragma endregion
-
 #pragma region Utils
 
 template <typename... Ts>
@@ -853,37 +808,38 @@ void setupEndpoint(AsyncWebServer *server)
 {
 
   server->on("/cx1", HTTP_GET, [](AsyncWebServerRequest *request)
-    {
+             {
       String message = levelToJson(cx1_pins);
       WebSerial.println(message);
-      request->send_P(200, F("application/json"), message.c_str()); 
-    });
+      request->send_P(200, F("application/json"), message.c_str()); });
 
   server->on("/shower", HTTP_GET, [](AsyncWebServerRequest *request)
-    {
-      DynamicJsonDocument doc(256);
-      doc["status"] = false;
+             {
+               DynamicJsonDocument doc(256);
+               doc["status"] = false;
 
-      if(request->hasParam("p")){
-        AsyncWebParameter* p = request->getParam("p");
-        if (p->value().compareTo("1") == 0){ //its equal
-          status_shower = 1;
-        }else{
-          status_shower = 0;
-        }
-        // delay(20);
+               if (request->hasParam("p"))
+               {
+                 AsyncWebParameter *p = request->getParam("p");
+                 if (p->value().compareTo("1") == 0)
+                 { // its equal
+                   status_shower = 1;
+                 }
+                 else
+                 {
+                   status_shower = 0;
+                 }
+                 // delay(20);
 
-        doc["status"] = true;
-        doc["relay_shower"] = String(status_shower);
-      }
+                 doc["status"] = true;
+                 doc["relay_shower"] = String(status_shower);
+               }
 
-      String message = "";
-      serializeJson(doc, message);
+               String message = "";
+               serializeJson(doc, message);
 
-      WebSerial.println(message);
-      request->send_P(200, F("application/json"), message.c_str()); 
-    
-    });
+               WebSerial.println(message);
+               request->send_P(200, F("application/json"), message.c_str()); });
 
   // ws.onEvent(onWsEvent);
   // server->addHandler(&ws);
@@ -891,6 +847,343 @@ void setupEndpoint(AsyncWebServer *server)
 
 #pragma endregion
 
+#pragma region Solar Controller
+
+#define RXD2 16
+#define TXD2 17
+#define DEVICE_ID 1
+
+#include <config.h>
+#include <ModbusMaster.h>
+
+ModbusMaster node;
+
+#ifndef TRANSMIT_PERIOD
+#define TRANSMIT_PERIOD 30000
+#endif
+unsigned long time_now = 0;
+
+void debug_output()
+{
+#ifdef DEBUG
+  // Output values to serial
+  Serial.printf("\n\nTime:  20%02d-%02d-%02d   %02d:%02d:%02d   \n", rtc.r.y, rtc.r.M, rtc.r.d, rtc.r.h, rtc.r.m, rtc.r.s);
+
+  Serial.print(F("\nLive-Data:           Volt        Amp       Watt  "));
+  Serial.printf("\n  Panel:            %7.3f    %7.3f    %7.3f ", live.l.pV / 100.f, live.l.pI / 100.f, live.l.pP / 100.0f);
+  Serial.printf("\n  Batt:             %7.3f    %7.3f    %7.3f ", live.l.bV / 100.f, live.l.bI / 100.f, live.l.bP / 100.0f);
+  Serial.printf("\n  Load:             %7.3f    %7.3f    %7.3f \n", live.l.lV / 100.f, live.l.lI / 100.f, live.l.lP / 100.0f);
+  Serial.printf("\n  Battery Current:  %7.3f  A ", batteryCurrent / 100.f);
+  Serial.printf("\n  Battery SOC:      %7.0f  %% ", batterySOC / 1.0f);
+  // Serial.printf( "\n  Load Switch:          %s   ",     (loadState==1?" On":"Off") );
+
+  // Serial.print(F("\n\nStatistics:  "));
+  // Serial.printf("\n  Panel:       min: %7.3f   max: %7.3f   V", stats.s.pVmin / 100.f, stats.s.pVmax / 100.f);
+  // Serial.printf("\n  Battery:     min: %7.3f   max: %7.3f   V\n", stats.s.bVmin / 100.f, stats.s.bVmax / 100.f);
+
+  // Serial.printf("\n  Consumed:    day: %7.3f   mon: %7.3f   year: %7.3f  total: %7.3f   kWh",
+  //               stats.s.consEnerDay / 100.f, stats.s.consEnerMon / 100.f, stats.s.consEnerYear / 100.f, stats.s.consEnerTotal / 100.f);
+  // Serial.printf("\n  Generated:   day: %7.3f   mon: %7.3f   year: %7.3f  total: %7.3f   kWh",
+  //               stats.s.genEnerDay / 100.f, stats.s.genEnerMon / 100.f, stats.s.genEnerYear / 100.f, stats.s.genEnerTotal / 100.f);
+  // Serial.printf("\n  CO2-Reduction:    %7.3f  t\n", stats.s.c02Reduction / 100.f);
+
+  Serial.print(F("\nStatus:"));
+  Serial.printf("\n    batt.volt:         %s   ", batt_volt_status[status_batt.volt]);
+  Serial.printf("\n    batt.temp:         %s   ", batt_temp_status[status_batt.temp]);
+  Serial.printf("\n    charger.charging:  %s   \n\n", charger_charging_status[charger_mode]);
+#endif
+}
+
+void niceDelay(unsigned long delayTime)
+{
+  delay(delayTime);
+}
+
+void ReadValues()
+{
+  // clear old data
+  //
+  memset(rtc.buf, 0, sizeof(rtc.buf));
+  memset(live.buf, 0, sizeof(live.buf));
+  // memset(stats.buf, 0, sizeof(stats.buf));
+
+  // Read registers for clock
+  //
+  niceDelay(50);
+  node.clearResponseBuffer();
+  uint8_t result = node.readHoldingRegisters(RTC_CLOCK, RTC_CLOCK_CNT);
+  if (result == node.ku8MBSuccess)
+  {
+
+    rtc.buf[0] = node.getResponseBuffer(0);
+    rtc.buf[1] = node.getResponseBuffer(1);
+    rtc.buf[2] = node.getResponseBuffer(2);
+
+    if (rtc.r.y == 14)
+    {
+      Serial.printf("\n\nDo Incorrect Date:  20%02d-%02d-%02d   %02d:%02d:%02d   \n", rtc.r.y, rtc.r.M, rtc.r.d, rtc.r.h, rtc.r.m, rtc.r.s);
+
+      rtc.r.y = 22;
+      rtc.r.M = 8;
+      rtc.r.d = 21;
+      rtc.r.h = 2;
+      rtc.r.m = 8;
+      rtc.r.s = 0;
+
+      node.clearTransmitBuffer();
+      node.send(rtc.buf[0]);
+      node.send(rtc.buf[1]);
+      node.send(rtc.buf[2]);
+      uint8_t resultSend = node.writeMultipleRegisters(RTC_CLOCK, RTC_CLOCK_CNT);
+      Serial.print(F("Result Write CLOCK"));
+      Serial.println(resultSend, HEX);
+    }
+    else
+    {
+      Serial.printf("\n\nCorrect Date then:  20%02d-%02d-%02d   %02d:%02d:%02d   \n", rtc.r.y, rtc.r.M, rtc.r.d, rtc.r.h, rtc.r.m, rtc.r.s);
+    }
+  }
+  else
+  {
+#ifdef DEBUG
+    Serial.print(F("Miss read rtc-data, ret val:"));
+    Serial.println(result, HEX);
+#endif
+  }
+  if (result == 226)
+    ErrorCounter++;
+
+  // read LIVE-Data
+  //
+  niceDelay(50);
+  node.clearResponseBuffer();
+  result = node.readInputRegisters(LIVE_DATA, LIVE_DATA_CNT);
+
+  if (result == node.ku8MBSuccess)
+  {
+
+    for (uint8_t i = 0; i < LIVE_DATA_CNT; i++)
+      live.buf[i] = node.getResponseBuffer(i);
+  }
+  else
+  {
+#ifdef DEBUG
+    Serial.print(F("Miss read liva-data, ret val:"));
+    Serial.println(result, HEX);
+#endif
+  }
+
+  //   // Statistical Data
+  //   niceDelay(50);
+  //   node.clearResponseBuffer();
+  //   result = node.readInputRegisters(STATISTICS, STATISTICS_CNT);
+
+  //   if (result == node.ku8MBSuccess)
+  //   {
+
+  //     for (uint8_t i = 0; i < STATISTICS_CNT; i++)
+  //       stats.buf[i] = node.getResponseBuffer(i);
+  //   }
+  //   else
+  //   {
+  // #ifdef DEBUG
+  //     Serial.print(F("Miss read statistics, ret val:"));
+  //     Serial.println(result, HEX);
+  // #endif
+  //   }
+
+  // BATTERY_TYPE
+  //   niceDelay(50);
+  //   node.clearResponseBuffer();
+  //   result = node.readInputRegisters(BATTERY_TYPE, 1);
+  //   if (result == node.ku8MBSuccess)
+  //   {
+
+  //     // BatteryType = node.getResponseBuffer(0);
+  // #ifdef DEBUG
+  //     Serial.println(String(node.getResponseBuffer(0)));
+  // #endif
+  //   }
+  //   else
+  //   {
+  // #ifdef DEBUG
+  //     Serial.print(F("Miss read BATTERY_TYPE, ret val:"));
+  //     Serial.println(result, HEX);
+  // #endif
+  //   }
+
+  //   // EQ_CHARGE_VOLT
+  //   niceDelay(50);
+  //   node.clearResponseBuffer();
+  //   result = node.readInputRegisters(EQ_CHARGE_VOLT, 1);
+  //   if (result == node.ku8MBSuccess)
+  //   {
+
+  //     // EQChargeVoltValue = node.getResponseBuffer(0);
+  // #ifdef DEBUG
+  //     Serial.println(String(node.getResponseBuffer(0)));
+  // #endif
+  //   }
+  //   else
+  //   {
+  // #ifdef DEBUG
+  //     Serial.print(F("Miss read EQ_CHARGE_VOLT, ret val:"));
+  //     Serial.println(result, HEX);
+  // #endif
+  //   }
+
+  //   // CHARGING_LIMIT_VOLT
+  //   niceDelay(50);
+  //   node.clearResponseBuffer();
+  //   result = node.readInputRegisters(CHARGING_LIMIT_VOLT, 1);
+  //   if (result == node.ku8MBSuccess)
+  //   {
+
+  //     // ChargeLimitVolt = node.getResponseBuffer(0);
+  // #ifdef DEBUG
+  //     Serial.println(String(node.getResponseBuffer(0)));
+  // #endif
+  //   }
+  //   else
+  //   {
+  // #ifdef DEBUG
+  //     Serial.print(F("Miss read CHARGING_LIMIT_VOLT, ret val:"));
+  //     Serial.println(result, HEX);
+  // #endif
+  //   }
+
+  //   // Capacity
+  //   niceDelay(50);
+  //   node.clearResponseBuffer();
+  //   result = node.readInputRegisters(BATTERY_CAPACITY, 1);
+  //   if (result == node.ku8MBSuccess)
+  //   {
+
+  //     // BatteryCapactity = node.getResponseBuffer(0);
+  // #ifdef DEBUG
+  //     Serial.println(String(node.getResponseBuffer(0)));
+  // #endif
+  //   }
+  //   else
+  //   {
+  // #ifdef DEBUG
+  //     Serial.print(F("Miss read BATTERY_CAPACITY, ret val:"));
+  //     Serial.println(result, HEX);
+  // #endif
+  //   }
+
+  // Battery SOC
+  niceDelay(50);
+  node.clearResponseBuffer();
+  result = node.readInputRegisters(BATTERY_SOC, 1);
+  if (result == node.ku8MBSuccess)
+  {
+
+    batterySOC = node.getResponseBuffer(0);
+  }
+  else
+  {
+#ifdef DEBUG
+    Serial.print(F("Miss read batterySOC, ret val:"));
+    Serial.println(result, HEX);
+#endif
+  }
+
+  // Battery Net Current = Icharge - Iload
+  niceDelay(50);
+  node.clearResponseBuffer();
+  result = node.readInputRegisters(BATTERY_CURRENT_L, 2);
+  if (result == node.ku8MBSuccess)
+  {
+
+    batteryCurrent = node.getResponseBuffer(0);
+    batteryCurrent |= node.getResponseBuffer(1) << 16;
+    // #ifdef DEBUG
+    // Serial.println(String(batteryCurrent));
+    // #endif
+  }
+  else
+  {
+#ifdef DEBUG
+    Serial.print(F("Miss read batteryCurrent, ret val:"));
+    Serial.println(result, HEX);
+#endif
+  }
+
+  //   if (!switch_load) {
+  //     // State of the Load Switch
+  //     niceDelay(50);
+  //     node.clearResponseBuffer();
+  //     result = node.readCoils(  LOAD_STATE, 1 );
+  //     if (result == node.ku8MBSuccess)  {
+
+  //       loadState = node.getResponseBuffer(0);
+
+  //     } else  {
+  // #ifdef DEBUG
+  //       Serial.print(F("Miss read loadState, ret val:"));
+  //       Serial.println(result, HEX);
+  //  #endif
+  //     }
+  //   }
+
+  // Read Model
+  //   niceDelay(50);
+  //   node.clearResponseBuffer();
+  //   result = node.readInputRegisters(CCMODEL, 1);
+  //   if (result == node.ku8MBSuccess)
+  //   {
+
+  //     // CCModel = node.getResponseBuffer(0);
+  //   }
+  //   else
+  //   {
+  // #ifdef DEBUG
+  //     Serial.print(F("Miss read Model, ret val:"));
+  //     Serial.println(result, HEX);
+  // #endif
+  //   }
+
+  // Read Status Flags
+  niceDelay(50);
+  node.clearResponseBuffer();
+  result = node.readInputRegisters(0x3200, 2);
+  if (result == node.ku8MBSuccess)
+  {
+
+    uint16_t temp = node.getResponseBuffer(0);
+#ifdef DEBUG
+    Serial.print(F("Batt Flags : "));
+    Serial.println(temp);
+#endif
+
+    status_batt.volt = temp & 0b1111;
+    status_batt.temp = (temp >> 4) & 0b1111;
+    status_batt.resistance = (temp >> 8) & 0b1;
+    status_batt.rated_volt = (temp >> 15) & 0b1;
+
+    temp = node.getResponseBuffer(1);
+#ifdef DEBUG
+    Serial.print(F("Chrg Flags : "));
+    Serial.println(temp, HEX);
+#endif
+
+    charger_mode = (temp & 0b0000000000001100) >> 2;
+#ifdef DEBUG
+    Serial.print(F("charger_mode  : "));
+    Serial.println(charger_mode);
+#endif
+  }
+  else
+  {
+#ifdef DEBUG
+    Serial.print(F("Miss read ChargeState, ret val:"));
+    Serial.println(result, HEX);
+#endif
+  }
+}
+
+#pragma endregion
 // =======================================================================
 
 // That region must be in the end.
@@ -903,10 +1196,29 @@ void setup()
   setupPins(cx1_pins);
 
   Serial.begin(115200);
+
   while (!Serial)
     ;
 
   delay(200);
+
+  Serial.println("mac ssid: " + ssid);
+
+  if (IS_TEST)
+  {
+
+    Serial1.begin(115200, SERIAL_8N1, RXD2, TXD2);
+    // init modbus in receive mode
+    // pinMode(MAX485_RE, OUTPUT);
+    // pinMode(MAX485_DE, OUTPUT);
+    // postTransmission();
+
+    // EPEver Device ID and Baud Rate
+    node.begin(DEVICE_ID, Serial1);
+    // modbus callbacks
+    // node.preTransmission(preTransmission);
+    // node.postTransmission(postTransmission);
+  }
 
 #pragma region WifiConfigs
   Serial.print(F("\nStarting Async_ESP32_FSWebServer_DRD using "));
@@ -914,7 +1226,7 @@ void setup()
   Serial.print(F(" on "));
   Serial.println(ARDUINO_BOARD);
   Serial.println(ESP_ASYNC_WIFIMANAGER_VERSION);
-  Serial.println(ESP_DOUBLE_RESET_DETECTOR_VERSION);
+  // Serial.println(ESP_DOUBLE_RESET_DETECTOR_VERSION);
 
 #if defined(ESP_ASYNC_WIFIMANAGER_VERSION_INT)
   if (ESP_ASYNC_WIFIMANAGER_VERSION_INT < ESP_ASYNC_WIFIMANAGER_VERSION_MIN)
@@ -965,10 +1277,10 @@ void setup()
 
   Serial.println();
 
-  drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
+  // drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
 
-  if (!drd)
-    Serial.println(F("Can't instantiate. Disable DRD feature"));
+  // if (!drd)
+  //   Serial.println(F("Can't instantiate. Disable DRD feature"));
 
   unsigned long startedAt = millis();
 
@@ -1073,14 +1385,14 @@ void setup()
     initialConfig = true;
   }
 
-  if (drd->detectDoubleReset())
-  {
-    // DRD, disable timeout.
-    ESPAsync_wifiManager.setConfigPortalTimeout(0);
+  // if (drd->detectDoubleReset())
+  // {
+  //   // DRD, disable timeout.
+  //   ESPAsync_wifiManager.setConfigPortalTimeout(0);
 
-    Serial.println(F("Open Config Portal without Timeout: Double Reset Detected"));
-    initialConfig = true;
-  }
+  //   Serial.println(F("Open Config Portal without Timeout: Double Reset Detected"));
+  //   initialConfig = true;
+  // }
 
   if (initialConfig)
   {
@@ -1327,8 +1639,6 @@ void setup()
 
   AsyncElegantOTA.begin(&server, http_username.c_str(), http_password.c_str()); // Start AsyncElegantOTA
 
- 
-
   // WebSerial is accessible at "<IP Address>/webserial" in browser
   WebSerial.begin(&server);
   /* Attach Message Callback */
@@ -1351,8 +1661,14 @@ void setup()
   digitalWrite(LED_BUILTIN, LED_OFF);
 }
 
-// unsigned long lastTime = 0;
-unsigned long timerDelay = INTERVAL_READ_PINS;
+unsigned long SHOWER_INTERVAL = 250;
+unsigned long CONTROLLER_INTERVAL = 30000;
+
+static ulong check_water_timeout = 0;
+static ulong shower_timeout = 0;
+static ulong controller_timeout = 0;
+
+static ulong current_millis_loop;
 
 void loop()
 {
@@ -1365,19 +1681,87 @@ void loop()
 
   check_status();
 
-  if ((millis() - lastTime) > timerDelay)
+  current_millis_loop = millis();
+
+  if ((current_millis_loop > shower_timeout) || (shower_timeout == 0))
   {
+    if (old_status_shower != status_shower)
+    {
+      relayShower(status_shower == 1);
+      old_status_shower = status_shower;
+    }
+
+    events.send(String(status_shower).c_str(), "shower_status", millis());
+    shower_timeout = current_millis_loop + SHOWER_INTERVAL;
+  }
+
+  if ((current_millis_loop > check_water_timeout) || (check_water_timeout == 0))
+  {
+
     String message = levelToJson(cx1_pins);
     // Send Events to the Web Server with the Sensor Readings
     events.send("ping", NULL, millis());
     events.send(message.c_str(), "shower_box", millis());
 
-    relayShower(status_shower==1);
-        // doc["relay_shower"] = String(digitalRead(PIN_RELAY_SHOWER));
+    check_water_timeout = current_millis_loop + INTERVAL_READ_PINS;
+  }
 
-    events.send(String(status_shower).c_str(),"shower_status",millis());
+  if (IS_TEST)
+  {
 
-    lastTime = millis();
+    if ((current_millis_loop > controller_timeout) || (controller_timeout == 0))
+    {
+
+      ReadValues();
+
+            debug_output();
+
+      Serial.println("Start sending...");
+      DynamicJsonDocument doc(1024);
+      char *time = NULL;
+      asprintf(&time, "20%02d-%02d-%02d   %02d:%02d:%02d", rtc.r.y, rtc.r.M, rtc.r.d, rtc.r.h, rtc.r.m, rtc.r.s);
+      doc["time"] = time;
+
+      // Serial.print(F("\nLive-Data:           Volt        Amp       Watt  "));
+      // Serial.printf("\n  Panel:            %7.3f    %7.3f    %7.3f ", live.l.pV / 100.f, live.l.pI / 100.f, live.l.pP / 100.0f);
+      // Serial.printf("\n  Batt:             %7.3f    %7.3f    %7.3f ", live.l.bV / 100.f, live.l.bI / 100.f, live.l.bP / 100.0f);
+      // Serial.printf("\n  Load:             %7.3f    %7.3f    %7.3f \n", live.l.lV / 100.f, live.l.lI / 100.f, live.l.lP / 100.0f);
+      // Serial.printf("\n  Battery Current:  %7.3f  A ", batteryCurrent / 100.f);
+      // Serial.printf("\n  Battery SOC:      %7.0f  %% ", batterySOC / 1.0f);
+
+      String message = "";
+      serializeJson(doc, message);
+
+      // free(time);
+      events.send(message.c_str(), "controller_status", millis());
+
+      controller_timeout = current_millis_loop + CONTROLLER_INTERVAL;
+      // Read Values from Charge Controller
+
+
+
+      Serial.print(F("Error count = "));
+      Serial.println(ErrorCounter);
+
+      if (ErrorCounter > 5)
+      {
+        // init modbus in receive mode
+        // pinMode(MAX485_RE, OUTPUT);
+        // pinMode(MAX485_DE, OUTPUT);
+        // postTransmission();
+
+        // EPEver Device ID and Baud Rate
+        node.begin(DEVICE_ID, Serial1);
+
+        // modbus callbacks
+        // node.preTransmission(preTransmission);
+        // node.postTransmission(postTransmission);
+        ErrorCounter = 0;
+      }
+
+      // power down MAX485_DE
+      // postTransmission()/;
+    }
   }
 }
 #pragma endregion

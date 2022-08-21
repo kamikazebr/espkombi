@@ -116,7 +116,7 @@
   }
 
   function updateShowerButton(new_status) {
-    console.log('updateShowerButton new_status',new_status);
+    // console.log('updateShowerButton new_status',new_status);
     shower_status = new_status;
     setTextShowerButton(new_status==1?"Desligar":"Ligar",false);
     setStateShowerButton(new_status==1?false:true);
@@ -148,14 +148,23 @@
     }, false);
 
     source.addEventListener('shower_box', function (e) {
-      console.log("json string", e.data);
+      console.log("shower_box", e.data);
       const obj = JSON.parse(e.data);
       updateLevels(obj["cx1"]);
     }, false);
 
     source.addEventListener('shower_status', function (e) {
-      console.log("json string", e.data);
+      console.log("shower_status", e.data);
       updateShowerButton(e.data);
+    }, false);
+
+    source.addEventListener('controller_status', function (e) {
+      try {
+        const obj = JSON.parse(e.data);
+        console.log("controller_status obj:", obj);
+      } catch (error) {
+        console.log("error with controller_status:", e.data);
+      }
     }, false);
 
     source.addEventListener('time', function (e) {
