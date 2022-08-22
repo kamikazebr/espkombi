@@ -1183,6 +1183,13 @@ void ReadValues()
   }
 }
 
+char * floatToString(float_t value)
+{
+  char *toRet = NULL;
+  asprintf(&toRet, "%.3f", value);
+  return toRet;
+}
+
 #pragma endregion
 // =======================================================================
 
@@ -1714,22 +1721,34 @@ void loop()
 
       ReadValues();
 
-            debug_output();
+      debug_output();
 
       Serial.println("Start sending...");
       DynamicJsonDocument doc(1024);
       char *time = NULL;
-      asprintf(&time, "20%02d-%02d-%02d   %02d:%02d:%02d", rtc.r.y, rtc.r.M, rtc.r.d, rtc.r.h, rtc.r.m, rtc.r.s);
+      asprintf(&time, "20%02d-%02d-%02d %02d:%02d:%02d", rtc.r.y, rtc.r.M, rtc.r.d, rtc.r.h, rtc.r.m, rtc.r.s);
       doc["time"] = time;
 
-      // Serial.print(F("\nLive-Data:           Volt        Amp       Watt  "));
-      // Serial.printf("\n  Panel:            %7.3f    %7.3f    %7.3f ", live.l.pV / 100.f, live.l.pI / 100.f, live.l.pP / 100.0f);
-      // Serial.printf("\n  Batt:             %7.3f    %7.3f    %7.3f ", live.l.bV / 100.f, live.l.bI / 100.f, live.l.bP / 100.0f);
-      // Serial.printf("\n  Load:             %7.3f    %7.3f    %7.3f \n", live.l.lV / 100.f, live.l.lI / 100.f, live.l.lP / 100.0f);
-      // Serial.printf("\n  Battery Current:  %7.3f  A ", batteryCurrent / 100.f);
-      // Serial.printf("\n  Battery SOC:      %7.0f  %% ", batterySOC / 1.0f);
+      doc["panel"]["volt"] = floatToString(live.l.pV / 100.f);
+      doc["panel"]["amp"] = floatToString(live.l.pI / 100.f);
+      doc["panel"]["watt"] = floatToString(live.l.pP / 100.f);
 
-      String message = "";
+      doc["batt"]["volt"] = floatToString(live.l.bV / 100.f);
+      doc["batt"]["amp"] = floatToString(live.l.bI / 100.f);
+      doc["batt"]["watt"] = floatToString(live.l.bP / 100.f);
+
+      doc["load"]["volt"] = floatToString(live.l.lV / 100.f);
+      doc["load"]["amp"] = floatToString(live.l.lI / 100.f);
+      doc["load"]["watt"] = floatToString(live.l.lP / 100.f);
+
+          // Serial.print(F("\nLive-Data:           Volt        Amp       Watt  "));
+          // Serial.printf("\n  Panel:            %7.3f    %7.3f    %7.3f ", live.l.pV / 100.f, live.l.pI / 100.f, live.l.pP / 100.0f);
+          // Serial.printf("\n  Batt:             %7.3f    %7.3f    %7.3f ", live.l.bV / 100.f, live.l.bI / 100.f, live.l.bP / 100.0f);
+          // Serial.printf("\n  Load:             %7.3f    %7.3f    %7.3f \n", live.l.lV / 100.f, live.l.lI / 100.f, live.l.lP / 100.0f);
+          // Serial.printf("\n  Battery Current:  %7.3f  A ", batteryCurrent / 100.f);
+          // Serial.printf("\n  Battery SOC:      %7.0f  %% ", batterySOC / 1.0f);
+
+          String message = "";
       serializeJson(doc, message);
 
       // free(time);
@@ -1737,8 +1756,6 @@ void loop()
 
       controller_timeout = current_millis_loop + CONTROLLER_INTERVAL;
       // Read Values from Charge Controller
-
-
 
       Serial.print(F("Error count = "));
       Serial.println(ErrorCounter);
