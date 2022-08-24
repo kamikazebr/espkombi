@@ -6,6 +6,7 @@ import viteCompression from 'vite-plugin-compression';
 export default defineConfig({
   plugins: [svelte(),viteCompression()],
   build:{
-    outDir:'../data'
+    outDir:'../data', 
+    emptyOutDir:true
   }
 })

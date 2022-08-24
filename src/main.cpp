@@ -1668,7 +1668,7 @@ void setup()
   digitalWrite(LED_BUILTIN, LED_OFF);
 }
 
-unsigned long SHOWER_INTERVAL = 250;
+unsigned long SHOWER_INTERVAL = 20;
 unsigned long CONTROLLER_INTERVAL = 30000;
 
 static ulong check_water_timeout = 0;
@@ -1697,7 +1697,6 @@ void loop()
       relayShower(status_shower == 1);
       old_status_shower = status_shower;
     }
-
     events.send(String(status_shower).c_str(), "shower_status", millis());
     shower_timeout = current_millis_loop + SHOWER_INTERVAL;
   }
