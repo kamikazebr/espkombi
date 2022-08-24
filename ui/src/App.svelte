@@ -17,6 +17,9 @@
         fetch(`/shower?p=${send_status}`).then(res=>res.json()).then(json=>{
           // let text = send_status == "1" ? "Desligar": "Ligar";
           // btn_shower.textContent = text;
+        }).catch(reason=>{
+          console.log(reason);
+          btn_shower.textContent="Erro!";
         }).finally(()=> btn_shower.ariaDisabled = false);
       }
     }
